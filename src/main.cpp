@@ -4,7 +4,8 @@
 int main() {
     MyFreenectDevice device;
     int k;
-    while(device.updateFrames() && k!=30){
+    cout << "STOP WITH ESC" << endl;
+    while(device.updateFrames() && k!=27){
         cv::Mat rgb, rgbMapped2Depth, depth, depthMM;
         device.getVideo(rgb);
         device.getRgbMapped2Depth(rgbMapped2Depth);
