@@ -11,8 +11,8 @@ int main() {
         device.getDepth(depth);
         device.getDepthMM(depthMM);
 
-        imshow("rgb", rgb/255.0f);
-        imshow("rgbMapped2Depth", rgbMapped2Depth/255.0f);
+        imshow("rgb", rgb);
+        imshow("rgbMapped2Depth", rgbMapped2Depth);
         imshow("depth", depth);
         imshow("depthMM", depthMM);
         k = cv::waitKey(1);

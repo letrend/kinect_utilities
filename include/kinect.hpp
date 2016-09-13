@@ -40,12 +40,15 @@ public:
 class MyFreenectDevice{
 public:
     MyFreenectDevice(){
-
         filelogger = new MyFileLogger("log.txt");
         if (filelogger->good())
             libfreenect2::setGlobalLogger(filelogger);
         else
             cout << "ERROR: could not initialize logger" << endl;
+
+        rgb = frames[libfreenect2::Frame::Color];
+        ir = frames[libfreenect2::Frame::Ir];
+        depth = frames[libfreenect2::Frame::Depth];
 
         pipeline = new libfreenect2::CpuPacketPipeline();
 
@@ -63,9 +66,6 @@ public:
 
         registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
 
-        undistorted = new libfreenect2::Frame(512, 424, 4);
-        registered = new libfreenect2::Frame(512, 424, 4);
-
         int types = 0;
         types |= libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth;
         listener = new libfreenect2::SyncMultiFrameListener(types);
@@ -73,10 +73,15 @@ public:
         dev->setColorFrameListener(listener);
         dev->setIrAndDepthFrameListener(listener);
 
-        libfreenect2::Freenect2Device::ColorCameraParams cameraParams = dev->getColorCameraParams();
-        cout << "cameraparams:\n" << cameraParams.fx << " " << cameraParams.fy << " " << cameraParams.cx << " " << cameraParams.cy << endl;
-        libfreenect2::Freenect2Device::IrCameraParams irCameraParams = dev->getIrCameraParams();
-        cout << "ircameraparams:\n" << irCameraParams.fx << " " << irCameraParams.fy << " " << irCameraParams.cx << " " << irCameraParams.cy << endl;
+        irCameraParams = dev->getIrCameraParams();
+        cout << "IR camera params: \n"
+             << "fx: " << irCameraParams.fx << "\n"
+             << "fy: " << irCameraParams.fy << "\n"
+             << "cx: " << irCameraParams.cx << "\n"
+             << "cy: " << irCameraParams.cy <<  endl;
+
+        undistorted = new libfreenect2::Frame(512, 424, 4);
+        registered = new libfreenect2::Frame(512, 424, 4);
     }
 
     ~MyFreenectDevice(){
@@ -90,29 +95,49 @@ public:
     }
 
     void getVideo(cv::Mat& output) {
-        cv::Mat img = cv::Mat(rgb->height,rgb->width,CV_8UC4,rgb->data);
-        img.convertTo(output,CV_32FC3);
+//        cv::Mat img = cv::Mat(rgb->height,rgb->width,CV_8UC4,rgb->data), img2;
+        //        cv::flip(img, img, 1);
+        output = cv::Mat(rgb->height,rgb->width,CV_8UC3);
+        uchar *aOut = (uchar*)output.data;
+        int i=0;
+        for (int y=0; y<rgb->height; y++){
+            for (int x=0; x<rgb->width; x++){
+                for (int c=0; c<3; c++){
+                    aOut[c + 3*(x + (size_t)rgb->width*y)] = (uchar)rgb->data[c + 4*(x + (size_t)rgb->width*y)];
+                }
+            }
+        }
     }
 
     void getDepth(cv::Mat& output) {
         output = cv::Mat(undistorted->height,undistorted->width,CV_32FC1,undistorted->data);
         output/=1000.0f; // convert to meter
+//        cv::flip(output, output, 1);
     }
 
     void getDepthMM(cv::Mat& output) {
         output = cv::Mat(undistorted->height,undistorted->width,CV_32FC1,undistorted->data);
+//        cv::flip(output, output, 1);
     }
 
     void getRgbMapped2Depth(cv::Mat& output) {
-        cv::Mat img = cv::Mat(registered->height,registered->width,CV_8UC4,registered->data);
-        img.convertTo(output,CV_32FC3);
+        output = cv::Mat(registered->height,registered->width,CV_32FC3);
+        float *aOut = (float*)output.data;
+        int i=0;
+        for (int y=0; y<registered->height; y++){
+            for (int x=0; x<registered->width; x++){
+                for (int c=0; c<3; c++){
+                    aOut[c + 3*(x + (size_t)registered->width*y)] = (float)registered->data[c + 4*(x + (size_t)registered->width*y)]/255.0f;
+                }
+            }
+        }
     }
 
     bool updateFrames(){
         listener->release(frames);
 
         if (!listener->waitForNewFrame(frames, 10*1000)){ // wait 10 seconds
-            cout << "timeout!" << endl;
+            cout << "WARNING: kinect timeout!" << endl;
             return false;
         }else{
             rgb = frames[libfreenect2::Frame::Color];
@@ -123,16 +148,17 @@ public:
         }
     }
 
+    libfreenect2::Freenect2Device::IrCameraParams irCameraParams;
 private:
     MyFileLogger *filelogger;
     libfreenect2::Freenect2 freenect2;
-    libfreenect2::Freenect2Device *dev = 0;
-    libfreenect2::PacketPipeline *pipeline = 0;
+    libfreenect2::Freenect2Device *dev;
+    libfreenect2::PacketPipeline *pipeline;
     libfreenect2::Registration* registration;
     libfreenect2::Frame *undistorted, *registered;
     libfreenect2::SyncMultiFrameListener *listener;
     libfreenect2::FrameMap frames;
-    libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
-    libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
-    libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
+    libfreenect2::Frame *rgb;
+    libfreenect2::Frame *ir;
+    libfreenect2::Frame *depth;
 };
