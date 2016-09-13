@@ -40,12 +40,6 @@ public:
 class MyFreenectDevice{
 public:
     MyFreenectDevice(){
-        filelogger = new MyFileLogger("log.txt");
-        if (filelogger->good())
-            libfreenect2::setGlobalLogger(filelogger);
-        else
-            cout << "ERROR: could not initialize logger" << endl;
-
         rgb = frames[libfreenect2::Frame::Color];
         ir = frames[libfreenect2::Frame::Ir];
         depth = frames[libfreenect2::Frame::Depth];
@@ -91,7 +85,6 @@ public:
         delete undistorted;
         delete registered;
         delete listener;
-        delete filelogger;
     }
 
     void getVideo(cv::Mat& output) {
@@ -99,7 +92,6 @@ public:
         //        cv::flip(img, img, 1);
         output = cv::Mat(rgb->height,rgb->width,CV_8UC3);
         uchar *aOut = (uchar*)output.data;
-        int i=0;
         for (int y=0; y<rgb->height; y++){
             for (int x=0; x<rgb->width; x++){
                 for (int c=0; c<3; c++){
@@ -123,7 +115,6 @@ public:
     void getRgbMapped2Depth(cv::Mat& output) {
         output = cv::Mat(registered->height,registered->width,CV_32FC3);
         float *aOut = (float*)output.data;
-        int i=0;
         for (int y=0; y<registered->height; y++){
             for (int x=0; x<registered->width; x++){
                 for (int c=0; c<3; c++){
