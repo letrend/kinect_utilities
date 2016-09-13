@@ -26,18 +26,14 @@ public:
     };
 
     void setInitialPose(Eigen::Matrix4d pose_init){
-        pose = pose_init;
+        T_current = Sophus::SE3d(pose_init);
     }
 
     uint64_t getCurrTime(){
         return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
     }
 
-    void getPoseFromDepth(cv::Mat &depth0, cv::Mat &depth1){
-        // depth maps need to be in milimeters
-        depth0.convertTo(depth0,CV_16U);
-        depth1.convertTo(depth1,CV_16U);
-
+    void getPoseFromDepth(cv::Mat &depth0, cv::Mat &depth1){ ;
         // ICP
         icpOdom->initICPModel((unsigned short *)depth0.data, 20.0f);
 
