@@ -1,5 +1,4 @@
 #pragma once
-
 #include "ICPOdometry.h"
 #include <chrono>
 
@@ -9,8 +8,8 @@ public:
         icpOdom = new ICPOdometry(pWidth, pHeight, cx, cy, fx, fy);
         pose = pose_init;
         T_current = Sophus::SE3d(pose_init);
-        depth0 = cv::Mat::zeros(pHeight, pWidth, CV_16U);  
-        depth1 = cv::Mat::zeros(pHeight, pWidth, CV_16U);  
+        depth_prev = cv::Mat::zeros(pHeight, pWidth, CV_16U);
+        depth_current = cv::Mat::zeros(pHeight, pWidth, CV_16U);
         width = pWidth;
         height = pHeight;
     };
@@ -19,8 +18,8 @@ public:
         icpOdom = new ICPOdometry(pWidth, pHeight, cx, cy, fx, fy);
         pose = Eigen::Matrix4d::Identity();
         T_current = Sophus::SE3d(pose);
-        depth0 = cv::Mat::zeros(pHeight, pWidth, CV_16U);  
-        depth1 = cv::Mat::zeros(pHeight, pWidth, CV_16U);  
+        depth_prev = cv::Mat::zeros(pHeight, pWidth, CV_16U);
+        depth_current = cv::Mat::zeros(pHeight, pWidth, CV_16U);
         width = pWidth;
         height = pHeight;
     };
@@ -35,13 +34,13 @@ public:
     
     void getPoseFromDepth(cv::Mat &depth0, cv::Mat &depth1){
          // depth maps need to be in milimeters
-        depth0.convertTo(depth0,CV_16U);
-        depth1.convertTo(depth1,CV_16U);
+        depth0.convertTo(depth_prev,CV_16U);
+        depth1.convertTo(depth_current,CV_16U);
         
         // ICP
-        icpOdom->initICPModel((unsigned short *)depth0.data, 20.0f);
+        icpOdom->initICPModel((unsigned short *)depth_prev.data, 20.0f);
         
-        icpOdom->initICP((unsigned short *)depth1.data, 20.0f);
+        icpOdom->initICP((unsigned short *)depth_current.data, 20.0f);
 
         T_prev = T_current;
 
@@ -74,8 +73,8 @@ private:
     ICPOdometry *icpOdom;
     Eigen::Matrix4d pose;
     Sophus::SE3d T_current, T_prev;
-    cv::Mat depth0;
-    cv::Mat depth1;
+    cv::Mat depth_prev;
+    cv::Mat depth_current;
     std::vector<Eigen::Matrix< double, 3, 1 >> translations;
     size_t width,height;
 
