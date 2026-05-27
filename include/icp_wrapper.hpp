@@ -14,8 +14,10 @@ public:
         height = pHeight;
     };
     
-    ICPCUDA(size_t pWidth, size_t pHeight, float cx, float cy, float fx, float fy){
-        icpOdom = new ICPOdometry(pWidth, pHeight, cx, cy, fx, fy);
+    ICPCUDA(size_t pWidth, size_t pHeight, float cx, float cy, float fx, float fy,
+            float distThresh = 0.10f,
+            float angleThresh = 0.342020143f /* sin(20 deg) */){
+        icpOdom = new ICPOdometry(pWidth, pHeight, cx, cy, fx, fy, distThresh, angleThresh);
         pose = Eigen::Matrix4d::Identity();
         T_current = Sophus::SE3d(pose);
         depth_prev = cv::Mat::zeros(pHeight, pWidth, CV_16U);

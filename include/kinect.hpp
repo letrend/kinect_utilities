@@ -5,13 +5,14 @@
 #include <fstream>
 #include <cstdlib>
 // freenect
+#include <libfreenect2/config.h>
 #include <libfreenect2/libfreenect2.hpp>
 #include <libfreenect2/frame_listener_impl.h>
 #include <libfreenect2/registration.h>
 #include <libfreenect2/packet_pipeline.h>
 #include <libfreenect2/logger.h>
 // opencv
-#include <opencv/cv.h>
+#include <opencv2/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
 using namespace std;
@@ -50,7 +51,34 @@ public:
         ir = frames[libfreenect2::Frame::Ir];
         depth = frames[libfreenect2::Frame::Depth];
 
-        pipeline = new libfreenect2::CpuPacketPipeline();
+        pipeline = nullptr;
+        // Prefer fast GPU pipelines. CpuPacketPipeline is too slow for
+        // Kinect v2 and the listener starves. Try OpenGL first because the
+        // OpenCL path can hang for seconds on systems with a broken ICD
+        // (e.g. beignet on Intel).
+#ifdef LIBFREENECT2_WITH_CUDA_SUPPORT
+        try { pipeline = new libfreenect2::CudaPacketPipeline();
+              cout << "[kinect] using CudaPacketPipeline" << endl; }
+        catch (...) { pipeline = nullptr; }
+#endif
+#ifdef LIBFREENECT2_WITH_OPENGL_SUPPORT
+        if (!pipeline) {
+            try { pipeline = new libfreenect2::OpenGLPacketPipeline();
+                  cout << "[kinect] using OpenGLPacketPipeline" << endl; }
+            catch (...) { pipeline = nullptr; }
+        }
+#endif
+#ifdef LIBFREENECT2_WITH_OPENCL_SUPPORT
+        if (!pipeline) {
+            try { pipeline = new libfreenect2::OpenCLPacketPipeline();
+                  cout << "[kinect] using OpenCLPacketPipeline" << endl; }
+            catch (...) { pipeline = nullptr; }
+        }
+#endif
+        if (!pipeline) {
+            pipeline = new libfreenect2::CpuPacketPipeline();
+            cout << "[kinect] WARNING: falling back to CpuPacketPipeline (slow)" << endl;
+        }
 
         if(freenect2.enumerateDevices() == 0)
         {
@@ -136,7 +164,7 @@ public:
     bool updateFrames(){
         listener->release(frames);
 
-        if (!listener->waitForNewFrame(frames, 10*1000)){ // wait 10 seconds
+        if (!listener->waitForNewFrame(frames, 2*1000)){ // wait 2 seconds
             cout << "WARNING: kinect timeout!" << endl;
             return false;
         }else{
