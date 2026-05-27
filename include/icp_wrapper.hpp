@@ -36,10 +36,27 @@ public:
     }
 
     void getPoseFromDepth(cv::Mat &depth0, cv::Mat &depth1){ ;
+        // ICPOdometry expects 16-bit unsigned depth in millimeters. Convert
+        // any input format to CV_16U so the byte layout actually matches what
+        // the CUDA kernels read. (Reinterpreting CV_32F bytes as uint16 yields
+        // garbage and the ICP returns an essentially identity transform.)
+        auto toU16mm = [](const cv::Mat &in, cv::Mat &out) {
+            if (in.type() == CV_16U) { out = in; return; }
+            if (in.type() == CV_32F) {
+                in.convertTo(out, CV_16U);   // already in mm in this codebase
+                return;
+            }
+            if (in.type() == CV_16S) { in.convertTo(out, CV_16U); return; }
+            // Fallback: try a direct conversion.
+            in.convertTo(out, CV_16U);
+        };
+        cv::Mat d0u, d1u;
+        toU16mm(depth0, d0u);
+        toU16mm(depth1, d1u);
         // ICP
-        icpOdom->initICPModel((unsigned short *)depth0.data, 20.0f);
+        icpOdom->initICPModel((unsigned short *)d0u.data, 20.0f);
 
-        icpOdom->initICP((unsigned short *)depth1.data, 20.0f);
+        icpOdom->initICP((unsigned short *)d1u.data, 20.0f);
 
         T_prev = T_current;
 
