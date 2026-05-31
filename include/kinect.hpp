@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
+#include <stdexcept>
 // freenect
 #include <libfreenect2/config.h>
 #include <libfreenect2/libfreenect2.hpp>
@@ -42,12 +43,14 @@ public:
 
 class MyFreenectDevice {
 public:
-    MyFreenectDevice() {
+    MyFreenectDevice()
+        : dev(nullptr), pipeline(nullptr), registration(nullptr),
+          undistorted(nullptr), registered(nullptr), listener(nullptr),
+          rgb(nullptr), ir(nullptr), depth(nullptr) {
         rgb = frames[libfreenect2::Frame::Color];
         ir = frames[libfreenect2::Frame::Ir];
         depth = frames[libfreenect2::Frame::Depth];
 
-        pipeline = nullptr;
         // Prefer fast GPU pipelines. CpuPacketPipeline is too slow for
         // Kinect v2 and the listener starves. Try OpenGL first because the
         // OpenCL path can hang for seconds on systems with a broken ICD
@@ -78,14 +81,14 @@ public:
 
         if (freenect2.enumerateDevices() == 0) {
             cout << "ERROR: no device connected!" << endl;
-            return;
+            throw std::runtime_error("no Kinect device connected");
         }
 
         string serial = freenect2.getDefaultDeviceSerialNumber();
         dev = freenect2.openDevice(serial, pipeline);
 
-        if (!dev->start())
-            cout << "ERROR: could not start kinect device" << endl;
+        if (!dev || !dev->start())
+            throw std::runtime_error("could not start Kinect device");
 
         registration = new libfreenect2::Registration(dev->getIrCameraParams(), dev->getColorCameraParams());
 
@@ -113,12 +116,15 @@ public:
     }
 
     ~MyFreenectDevice() {
-        dev->stop();
-        dev->close();
+        if (dev) {
+            dev->stop();
+            dev->close();
+        }
         delete registration;
         delete undistorted;
         delete registered;
         delete listener;
+        delete pipeline;
     }
 
     void getVideo(cv::Mat &output) {
