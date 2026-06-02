@@ -2,6 +2,22 @@
 
 #include "ICPOdometry.h"
 #include <chrono>
+#include <cmath>
+#include <limits>
+#include <string>
+
+struct ICPResult {
+    bool ok = false;
+    Eigen::Matrix4d pose = Eigen::Matrix4d::Identity();
+    Eigen::Matrix4d previousPose = Eigen::Matrix4d::Identity();
+    float residual = std::numeric_limits<float>::infinity();
+    float inliers = 0.0f;
+    float inlierRatio = 0.0f;
+    float translationStep = 0.0f;
+    float rotationStepDeg = 0.0f;
+    float elapsedMs = 0.0f;
+    std::string rejectionReason;
+};
 
 class ICPCUDA{
 public:
@@ -28,6 +44,7 @@ public:
     };
 
     void setInitialPose(Eigen::Matrix4d pose_init){
+        pose = pose_init;
         T_current = Sophus::SE3d(pose_init);
     }
 
@@ -35,7 +52,11 @@ public:
         return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
     }
 
-    void getPoseFromDepth(cv::Mat &depth0, cv::Mat &depth1){ ;
+    ICPResult getPoseFromDepth(cv::Mat &depth0, cv::Mat &depth1,
+                               float depthCutoffM = 20.0f,
+                               int iter0 = 10, int iter1 = 5, int iter2 = 4){ ;
+        ICPResult result;
+        result.previousPose = pose;
         // ICPOdometry expects 16-bit unsigned depth in millimeters. Convert
         // any input format to CV_16U so the byte layout actually matches what
         // the CUDA kernels read. (Reinterpreting CV_32F bytes as uint16 yields
@@ -54,9 +75,10 @@ public:
         toU16mm(depth0, d0u);
         toU16mm(depth1, d1u);
         // ICP
-        icpOdom->initICPModel((unsigned short *)d0u.data, 20.0f);
+        icpOdom->setIterations(iter0, iter1, iter2);
+        icpOdom->initICPModel((unsigned short *)d0u.data, depthCutoffM);
 
-        icpOdom->initICP((unsigned short *)d1u.data, 20.0f);
+        icpOdom->initICP((unsigned short *)d1u.data, depthCutoffM);
 
         T_prev = T_current;
 
@@ -75,6 +97,23 @@ public:
 
         pose.topLeftCorner(3, 3) = T_current.rotationMatrix();
         pose.topRightCorner(3, 1) = T_current.translation();
+        result.pose = pose;
+        result.residual = icpOdom->lastError;
+        result.inliers = icpOdom->lastInliers;
+        result.inlierRatio = float(icpOdom->lastInliers) / float(std::max<size_t>(1, width * height));
+        Eigen::Vector3d dt = pose.topRightCorner(3,1) - result.previousPose.topRightCorner(3,1);
+        result.translationStep = (float)dt.norm();
+        Eigen::Matrix3d dR = result.previousPose.topLeftCorner(3,3).transpose() * pose.topLeftCorner(3,3);
+        Eigen::AngleAxisd aa(dR);
+        result.rotationStepDeg = (float)(std::fabs(aa.angle()) * 180.0 / 3.14159265358979323846);
+        result.elapsedMs = float(tock - tick) / 1000.0f;
+        result.ok = std::isfinite(result.residual) &&
+                    std::isfinite(result.translationStep) &&
+                    std::isfinite(result.rotationStepDeg) &&
+                    result.inliers > 0.0f;
+        if (!result.ok)
+            result.rejectionReason = "non-finite ICP result";
+        return result;
     };
 public:
     Eigen::Matrix4d getPose(){
@@ -83,8 +122,12 @@ public:
     Eigen::Matrix4d getPose_inv(){
         return pose.inverse();
     };
+    void setPose(const Eigen::Matrix4d &newPose) {
+        pose = newPose;
+        T_current = Sophus::SE3d(newPose);
+    }
 
-    float mean_time;
+    float mean_time = 0.0f;
 private:
     ICPOdometry *icpOdom;
     Eigen::Matrix4d pose;
@@ -96,4 +139,3 @@ private:
 
     uint64_t count = 0;
 };
-
